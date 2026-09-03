@@ -9,6 +9,7 @@ const MEAL_TIMES = {
     cutoffMinute: 30,
     icon: "🌅",
   },
+
   Lunch: {
     servingHour: 13,
     servingMinute: 0,
@@ -16,6 +17,7 @@ const MEAL_TIMES = {
     cutoffMinute: 30,
     icon: "☀️",
   },
+
   Dinner: {
     servingHour: 21,
     servingMinute: 30,
@@ -59,6 +61,7 @@ function App() {
 
   return (
     <div className="app">
+
       <nav className="navbar">
         <div className="logo">
           🍃 MealMind AI
@@ -80,7 +83,9 @@ function App() {
       </nav>
 
       <main className="hero">
+
         <div className="hero-content">
+
           <div className="tag">
             SMART FOOD MANAGEMENT
           </div>
@@ -92,11 +97,13 @@ function App() {
           </h1>
 
           <p>
-            MealMind AI helps college messes predict meal demand before food is
-            prepared, reducing food waste and promoting sustainable consumption.
+            MealMind AI helps college messes predict meal demand before food
+            is prepared, reducing food waste and promoting sustainable
+            consumption.
           </p>
 
           <div className="hero-buttons">
+
             <button
               className="primary-btn"
               onClick={() => setPage("confirmation")}
@@ -110,10 +117,12 @@ function App() {
             >
               View Dashboard
             </button>
+
           </div>
         </div>
 
         <div className="hero-card">
+
           <div className="food-icon">🍽️</div>
 
           <h2>Smart Meal Planning</h2>
@@ -123,6 +132,7 @@ function App() {
           </p>
 
           <div className="mini-stats">
+
             <div>
               <strong>3</strong>
               <span>Meals Daily</span>
@@ -137,14 +147,18 @@ function App() {
               <strong>AI</strong>
               <span>Prediction</span>
             </div>
+
           </div>
         </div>
+
       </main>
 
       <section className="how-it-works">
+
         <h2>How MealMind AI Works</h2>
 
         <div className="steps">
+
           <div className="step">
             <div className="step-number">1</div>
             <h3>Confirm</h3>
@@ -168,14 +182,18 @@ function App() {
             <h3>Prepare</h3>
             <p>The mess prepares food based on final demand.</p>
           </div>
+
         </div>
+
       </section>
+
     </div>
   );
 }
 
 
 function MealConfirmation({ setPage, addResponse }) {
+
   const [name, setName] = useState("");
   const [meal, setMeal] = useState("Breakfast");
   const [choice, setChoice] = useState("Yes");
@@ -190,37 +208,8 @@ function MealConfirmation({ setPage, addResponse }) {
 
     return () => clearInterval(timer);
   }, []);
-const getMealStatus = (mealName) => {
-  const now = new Date();
 
-  const mealInfo = MEAL_TIMES[mealName];
 
-  const cutoffTime = new Date();
-  cutoffTime.setHours(
-    mealInfo.cutoffHour,
-    mealInfo.cutoffMinute,
-    0,
-    0
-  );
-  if (now < cutoffTime) {
-    return {
-      status: "open",
-      message: `Open for today's meal until ${formatTime(cutoffTime)}`,
-    };
-  }
-
-  if (now >= cutoffTime && now < servingTime) {
-    return {
-      status: "locked",
-      message: "Confirmation locked. Final count is being prepared.",
-    };
-  }
-
-  return {
-    status: "open",
-    message: "Open for tomorrow's meal",
-  };
-};
   const formatTime = (date) => {
     return date.toLocaleTimeString([], {
       hour: "2-digit",
@@ -228,7 +217,57 @@ const getMealStatus = (mealName) => {
     });
   };
 
+
+  const getMealStatus = (mealName) => {
+
+    const now = new Date();
+    const mealInfo = MEAL_TIMES[mealName];
+
+    const cutoffTime = new Date();
+    cutoffTime.setHours(
+      mealInfo.cutoffHour,
+      mealInfo.cutoffMinute,
+      0,
+      0
+    );
+
+    const servingTime = new Date();
+    servingTime.setHours(
+      mealInfo.servingHour,
+      mealInfo.servingMinute,
+      0,
+      0
+    );
+
+
+    // Before cutoff → Today's meal booking is open
+    if (now < cutoffTime) {
+      return {
+        status: "open",
+        message: `Open for today's meal until ${formatTime(cutoffTime)}`,
+      };
+    }
+
+
+    // Between cutoff and serving → Booking locked
+    if (now >= cutoffTime && now < servingTime) {
+      return {
+        status: "locked",
+        message: "Confirmation locked. Final count is being prepared.",
+      };
+    }
+
+
+    // After serving → Tomorrow's meal booking opens
+    return {
+      status: "open",
+      message: "Open for tomorrow's meal",
+    };
+  };
+
+
   const selectedMealStatus = getMealStatus(meal);
+
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -242,39 +281,50 @@ const getMealStatus = (mealName) => {
       alert("Meal confirmation is currently closed!");
       return;
     }
-const now = new Date();
 
-const mealInfo = MEAL_TIMES[meal];
 
-const servingTime = new Date();
-servingTime.setHours(
-  mealInfo.servingHour,
-  mealInfo.servingMinute,
-  0,
-  0
-);
+    const now = new Date();
 
-const mealDate = new Date();
+    const mealInfo = MEAL_TIMES[meal];
 
-if (now >= servingTime) {
-  mealDate.setDate(mealDate.getDate() + 1);
-}
+    const servingTime = new Date();
+    servingTime.setHours(
+      mealInfo.servingHour,
+      mealInfo.servingMinute,
+      0,
+      0
+    );
 
-const response = {
-  name,
-  meal,
-  choice,
-  mealDate: mealDate.toLocaleDateString(),
-  submittedTime: now.toLocaleTimeString(),
-};
+
+    const mealDate = new Date();
+
+    // If today's serving time has passed,
+    // booking belongs to tomorrow
+    if (now >= servingTime) {
+      mealDate.setDate(mealDate.getDate() + 1);
+    }
+
+
+    const response = {
+      name,
+      meal,
+      choice,
+      mealDate: mealDate.toLocaleDateString(),
+      submittedTime: now.toLocaleTimeString(),
+    };
+
+
     addResponse(response);
 
     setConfirmed(true);
   };
 
+
   return (
     <div className="form-page">
+
       <nav className="navbar">
+
         <div className="logo">
           🍃 MealMind AI
         </div>
@@ -285,21 +335,31 @@ const response = {
         >
           ← Back to Home
         </button>
+
       </nav>
+
 
       <div className="form-container">
 
         {!confirmed ? (
+
           <>
+
             <div className="form-header">
+
               <span>🍽️</span>
+
               <h1>Confirm Your Meal</h1>
+
               <p>
                 Current Time: {currentTime.toLocaleTimeString()}
               </p>
+
             </div>
 
+
             <div className="meal-timing-info">
+
               <h3>Today's Meal Schedule</h3>
 
               <div className="timing-row">
@@ -319,7 +379,9 @@ const response = {
                 <span>9:30 PM</span>
                 <small>Closes: 8:00 PM</small>
               </div>
+
             </div>
+
 
             <form onSubmit={handleSubmit}>
 
@@ -332,12 +394,14 @@ const response = {
                 onChange={(e) => setName(e.target.value)}
               />
 
+
               <label>Select Meal</label>
 
               <select
                 value={meal}
                 onChange={(e) => setMeal(e.target.value)}
               >
+
                 <option value="Breakfast">
                   🌅 Breakfast
                 </option>
@@ -349,23 +413,34 @@ const response = {
                 <option value="Dinner">
                   🌙 Dinner
                 </option>
+
               </select>
+
 
               <div
                 className={`meal-status ${selectedMealStatus.status}`}
               >
+
                 {selectedMealStatus.status === "open" && "🟢 "}
+
                 {selectedMealStatus.status === "locked" && "🔒 "}
-                {selectedMealStatus.status === "completed" && "⏳ "}
 
                 {selectedMealStatus.message}
+
               </div>
 
+
               {selectedMealStatus.status === "open" && (
+
                 <>
-                  <label>Will you have this meal?</label>
+
+                  <label>
+                    Will you have this meal?
+                  </label>
+
 
                   <div className="choice">
+
                     <input
                       type="radio"
                       name="mealChoice"
@@ -376,9 +451,12 @@ const response = {
                     <span>
                       Yes, I will have the meal
                     </span>
+
                   </div>
 
+
                   <div className="choice">
+
                     <input
                       type="radio"
                       name="mealChoice"
@@ -389,7 +467,9 @@ const response = {
                     <span>
                       No, I will not have the meal
                     </span>
+
                   </div>
+
 
                   <button
                     className="primary-btn submit-btn"
@@ -397,22 +477,35 @@ const response = {
                   >
                     Submit Confirmation
                   </button>
+
                 </>
               )}
 
+
               {selectedMealStatus.status !== "open" && (
+
                 <div className="locked-message">
+
                   🔒 This meal confirmation is currently locked.
+
                   <br />
+
                   The mess authority can now view the final count.
+
                 </div>
               )}
 
             </form>
+
           </>
+
         ) : (
+
           <div className="success-box">
-            <div className="success-icon">✓</div>
+
+            <div className="success-icon">
+              ✓
+            </div>
 
             <h1>Response Recorded!</h1>
 
@@ -430,9 +523,12 @@ const response = {
             >
               View Smart Dashboard →
             </button>
+
           </div>
         )}
+
       </div>
+
     </div>
   );
 }
@@ -442,60 +538,80 @@ function Dashboard({ setPage, responses }) {
 
   const [currentTime, setCurrentTime] = useState(new Date());
 
+
   useEffect(() => {
+
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
 
     return () => clearInterval(timer);
+
   }, []);
-const getMealData = (mealName) => {
-  const mealInfo = MEAL_TIMES[mealName];
 
-  const servingTime = new Date();
-  servingTime.setHours(
-    mealInfo.servingHour,
-    mealInfo.servingMinute,
-    0,
-    0
-  );
 
-  const targetDate = new Date();
+  const getMealData = (mealName) => {
 
-  if (currentTime >= servingTime) {
-    targetDate.setDate(targetDate.getDate() + 1);
-  }
+    const mealInfo = MEAL_TIMES[mealName];
 
-  const targetDateString = targetDate.toLocaleDateString();
 
-  const mealResponses = responses.filter(
-    (response) =>
-      response.meal === mealName &&
-      response.choice === "Yes" &&
-      response.mealDate === targetDateString
-  );
+    const servingTime = new Date();
+    servingTime.setHours(
+      mealInfo.servingHour,
+      mealInfo.servingMinute,
+      0,
+      0
+    );
 
-  const count = mealResponses.length;
 
-  const cutoffTime = new Date();
-  cutoffTime.setHours(
-    mealInfo.cutoffHour,
-    mealInfo.cutoffMinute,
-    0,
-    0
-  );
+    // Decide whether dashboard is showing today's
+    // or tomorrow's meal cycle
+    const targetDate = new Date();
 
-  let status = "open";
+    if (currentTime >= servingTime) {
+      targetDate.setDate(targetDate.getDate() + 1);
+    }
 
-  if (
-    currentTime >= cutoffTime &&
-    currentTime < servingTime
-  ) {
-    status = "locked";
-  }
 
-  // Prediction with 10% safety buffer
-  const predicted = Math.ceil(count * 1.1);
+    const targetDateString =
+      targetDate.toLocaleDateString();
+
+
+    const mealResponses = responses.filter(
+      (response) =>
+        response.meal === mealName &&
+        response.choice === "Yes" &&
+        response.mealDate === targetDateString
+    );
+
+
+    const count = mealResponses.length;
+
+
+    const cutoffTime = new Date();
+    cutoffTime.setHours(
+      mealInfo.cutoffHour,
+      mealInfo.cutoffMinute,
+      0,
+      0
+    );
+
+
+    let status = "open";
+
+
+    if (
+      currentTime >= cutoffTime &&
+      currentTime < servingTime
+    ) {
+      status = "locked";
+    }
+
+
+    const predicted =
+      Math.ceil(count * 1.1);
+
+
     return {
       count,
       predicted,
@@ -504,24 +620,35 @@ const getMealData = (mealName) => {
     };
   };
 
-  const breakfast = getMealData("Breakfast");
-  const lunch = getMealData("Lunch");
-  const dinner = getMealData("Dinner");
+
+  const breakfast =
+    getMealData("Breakfast");
+
+  const lunch =
+    getMealData("Lunch");
+
+  const dinner =
+    getMealData("Dinner");
+
 
   const totalConfirmed =
     breakfast.count +
     lunch.count +
     dinner.count;
 
+
   const totalPredicted =
     breakfast.predicted +
     lunch.predicted +
     dinner.predicted;
 
+
   return (
+
     <div className="dashboard-page">
 
       <nav className="navbar">
+
         <div className="logo">
           🍃 MealMind AI
         </div>
@@ -532,26 +659,36 @@ const getMealData = (mealName) => {
         >
           ← Back to Home
         </button>
+
       </nav>
+
 
       <div className="dashboard">
 
+
         <div className="dashboard-header">
+
           <div>
+
             <p className="tag">
               MESS AUTHORITY PANEL
             </p>
 
-            <h1>Today's Meal Dashboard</h1>
+            <h1>
+              Today's Meal Dashboard
+            </h1>
 
             <p>
               Live meal confirmations and final demand prediction.
             </p>
+
           </div>
+
 
           <div className="live-badge">
             ● {currentTime.toLocaleTimeString()}
           </div>
+
         </div>
 
 
@@ -578,6 +715,7 @@ const getMealData = (mealName) => {
         <div className="total-summary">
 
           <div>
+
             <p className="tag">
               TODAY'S TOTAL DEMAND
             </p>
@@ -587,20 +725,34 @@ const getMealData = (mealName) => {
             </h2>
 
             <p>
-              Total predicted preparation: {totalPredicted} meals
+              Total predicted preparation:
+              {" "}
+              {totalPredicted} meals
             </p>
+
           </div>
 
+
           <div className="total-circle">
-            <strong>{totalPredicted}</strong>
-            <span>Total Meals</span>
+
+            <strong>
+              {totalPredicted}
+            </strong>
+
+            <span>
+              Total Meals
+            </span>
+
           </div>
 
         </div>
 
 
         <div className="insight-box">
-          <h3>💡 MealMind AI Smart Insight</h3>
+
+          <h3>
+            💡 MealMind AI Smart Insight
+          </h3>
 
           <p>
             Each meal has an independent confirmation deadline.
@@ -608,9 +760,11 @@ const getMealData = (mealName) => {
             giving the mess authority a stable final count before
             food preparation begins.
           </p>
+
         </div>
 
       </div>
+
     </div>
   );
 }
@@ -619,52 +773,96 @@ const getMealData = (mealName) => {
 function MealCard({ title, data }) {
 
   return (
+
     <div className="meal-card">
 
       <div className="meal-card-header">
+
         <span className="meal-big-icon">
           {data.info.icon}
         </span>
 
+
         <div>
-          <h2>{title}</h2>
+
+          <h2>
+            {title}
+          </h2>
 
           <p>
+
             Serving: {
+
               title === "Breakfast"
                 ? "10:00 AM"
+
                 : title === "Lunch"
                 ? "1:00 PM"
+
                 : "9:30 PM"
+
             }
+
           </p>
+
         </div>
+
       </div>
 
-      <div className={`status-badge ${data.status}`}>
-        {data.status === "open" && "🟢 Confirmation Open"}
+
+      <div
+        className={`status-badge ${data.status}`}
+      >
+
+        {data.status === "open" &&
+          "🟢 Confirmation Open"}
 
         {data.status === "locked" &&
           "🔒 Final Count Locked"}
+
       </div>
+
 
       <div className="meal-numbers">
 
         <div>
-          <span>Confirmed</span>
-          <strong>{data.count}</strong>
+
+          <span>
+            Confirmed
+          </span>
+
+          <strong>
+            {data.count}
+          </strong>
+
         </div>
 
+
         <div>
-          <span>Predicted</span>
-          <strong>{data.predicted}</strong>
+
+          <span>
+            Predicted
+          </span>
+
+          <strong>
+            {data.predicted}
+          </strong>
+
         </div>
 
       </div>
 
+
       {data.status === "locked" && (
+
         <div className="final-count">
-          Final preparation count: {data.predicted} meals
+
+          Final preparation count:
+          {" "}
+          {data.predicted}
+          {" "}
+          meals
+
         </div>
       )}
 
