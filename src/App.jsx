@@ -877,7 +877,8 @@ setScanError("");
 
 try {
   const { data, error } = await supabase.functions.invoke(
-    "verify-meal-pass",
+  "smooth-worker",
+
     {
       body: { token: decodedText },
     }
