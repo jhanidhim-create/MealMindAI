@@ -1,6 +1,11 @@
+import { useRef } from "react";
+import { Html5Qrcode } from "html5-qrcode";
+import QRCode from "qrcode";
 import { useState, useEffect } from "react";
 import "./App.css";
-
+import StaffLogin from "./StaffLogin";
+import { supabase } from "./supabase.js";
+import { studentSupabase } from "./studentSupabase.js";
 const MEAL_TIMES = {
   Breakfast: {
     servingHour: 10,
@@ -30,6 +35,47 @@ const MEAL_TIMES = {
 function App() {
   const [page, setPage] = useState("home");
 
+const [staffLoggedIn, setStaffLoggedIn] = useState(false);
+
+useEffect(() => {
+  let active = true;
+
+  async function checkStaffSession() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session) {
+        const { data: staff, error } = await supabase
+          .from("canteen_staff")
+          .select("id")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (!active) return;
+
+        if (error || !staff) {
+          await supabase.auth.signOut();
+          setStaffLoggedIn(false);
+        } else {
+          setStaffLoggedIn(true);
+        }
+      }
+    } catch (error) {
+      console.error("Staff session check failed:", error);
+    } finally {
+      if (active) {
+        // Session check finished
+      }
+    }
+  }
+
+  checkStaffSession();
+
+  return () => {
+    active = false;
+  };
+}, []);
+
   const [responses, setResponses] = useState(() => {
     const saved = localStorage.getItem("mealResponses");
     return saved ? JSON.parse(saved) : [];
@@ -41,6 +87,30 @@ function App() {
     localStorage.setItem("mealResponses", JSON.stringify(updated));
   };
 
+if (page === "staff-login") {
+  return (
+    <StaffLogin
+      onLogin={() => {
+        setStaffLoggedIn(true);
+        setPage("dashboard");
+      }}
+      onBack={() => setPage("home")}
+    />
+  );
+}
+
+if (page === "dashboard" && !staffLoggedIn) {
+  return (
+    <StaffLogin
+      onLogin={() => {
+        setStaffLoggedIn(true);
+        setPage("dashboard");
+      }}
+      onBack={() => setPage("home")}
+    />
+  );
+}
+
   if (page === "confirmation") {
     return (
       <MealConfirmation
@@ -49,15 +119,25 @@ function App() {
       />
     );
   }
+  
+  if (page === "history") {
+  return <MealHistory setPage={setPage} />;
+}
 
-  if (page === "dashboard") {
-    return (
-      <Dashboard
-        setPage={setPage}
-        responses={responses}
-      />
-    );
-  }
+if (page === "dashboard") {
+  return (
+    <Dashboard
+      setPage={setPage}
+      responses={responses}
+      onLogout={async () => {
+        await supabase.auth.signOut();
+        setStaffLoggedIn(false);
+        setPage("home");
+      }}
+    />
+  );
+}
+
 
   return (
     <div className="app">
@@ -76,9 +156,11 @@ function App() {
             Confirm Meal
           </button>
 
-          <button onClick={() => setPage("dashboard")}>
-            Dashboard
-          </button>
+          
+<button onClick={() => setPage("staff-login")}>
+  Dashboard
+</button>
+
         </div>
       </nav>
 
@@ -110,10 +192,16 @@ function App() {
             >
               Confirm Your Meal →
             </button>
+            <button
+  className="secondary-btn"
+  onClick={() => setPage("history")}
+>
+  Meal History →
+</button>
 
             <button
               className="secondary-btn"
-              onClick={() => setPage("dashboard")}
+              onClick={() => setPage("staff-login")}
             >
               View Dashboard
             </button>
@@ -191,15 +279,155 @@ function App() {
   );
 }
 
+function MealHistory({ setPage }) {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refreshCount, setRefreshCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadHistory() {
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await studentSupabase.auth.getUser();
+
+        if (userError || !user?.email) {
+          throw new Error(
+            "Student login nahi mila. Pehle apne student email se meal confirm karo."
+          );
+        }
+
+        const { data, error: queryError } = await studentSupabase
+          .from("meal_confirmations")
+          .select(
+  "id, student_name, meal_type, meal_date, confirmation_token, status, confirmed_at, scanned_at"
+)
+          .ilike("student_email", user.email)
+          .order("confirmed_at", { ascending: false });
+
+        if (queryError) throw queryError;
+
+        
+const historyWithQR = await Promise.all(
+  (data || []).map(async (meal) => {
+    if (meal.status !== "unused" || !meal.confirmation_token) {
+      return { ...meal, qrDataUrl: null };
+    }
+
+    const qrDataUrl = await QRCode.toDataURL(
+      meal.confirmation_token,
+      { width: 240, margin: 2 }
+    );
+
+    return { ...meal, qrDataUrl };
+  })
+);
+
+if (active) setRecords(historyWithQR);
+
+      } catch (err) {
+        if (active) {
+          setError(err.message || "Meal history load nahi hui.");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [refreshCount]);
+
+  return (
+    <div className="app-container">
+      <h1>Meal History 📋</h1>
+      <p>Your previous meal confirmations</p>
+
+      {loading && <p>Loading meal history...</p>}
+
+      {error && <p>{error}</p>}
+
+      {!loading && !error && records.length === 0 && (
+        <p>Abhi koi meal record nahi mila.</p>
+      )}
+
+      {records.map((meal) => (
+        <div className="meal-history-card" key={meal.id}>
+          <h3>{meal.meal_type}</h3>
+          <p>Date: {meal.meal_date}</p>
+          <p>Status: {meal.status}</p>
+          
+{meal.status === "unused" && meal.qrDataUrl && (
+  <div>
+    <p>Show this QR code to the canteen staff.</p>
+    <img
+      src={meal.qrDataUrl}
+      alt={`${meal.meal_type} meal pass QR code`}
+      width="200"
+      height="200"
+    />
+  </div>
+)}
+
+          <p>
+            Confirmed:{" "}
+            {meal.confirmed_at
+              ? new Date(meal.confirmed_at).toLocaleString()
+              : "N/A"}
+          </p>
+          {meal.scanned_at && (
+            <p>
+              Scanned: {new Date(meal.scanned_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+      ))}
+
+      
+      <button
+        className="secondary-btn"
+        onClick={() => {
+          setLoading(true);
+          setError("");
+          setRefreshCount((count) => count + 1);
+        }}
+      >
+        ↻ Refresh History
+      </button>
+
+      <button
+        className="secondary-btn"
+        onClick={() => setPage("home")}
+      >
+        ← Back to Home
+      </button>
+
+    </div>
+  );
+}
+
 
 function MealConfirmation({ setPage, addResponse }) {
 
   const [name, setName] = useState("");
   const [meal, setMeal] = useState("Breakfast");
-  const [choice, setChoice] = useState("Yes");
   const [confirmed, setConfirmed] = useState(false);
-
+  const [mealPass, setMealPass] = useState(null);
+const [submitting, setSubmitting] = useState(false);
+const [submitError, setSubmitError] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date());
+  
+const [email, setEmail] = useState("");
+const [otp, setOtp] = useState("");
+const [otpSent, setOtpSent] = useState(false);
+const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -269,56 +497,113 @@ function MealConfirmation({ setPage, addResponse }) {
   const selectedMealStatus = getMealStatus(meal);
 
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  
 
-    if (!name.trim()) {
-      alert("Please enter your name!");
+const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!name.trim()) {
+    alert("Please enter your name!");
+    return;
+  }
+
+  if (!email.trim()) {
+    alert("Please enter your email!");
+    return;
+  }
+
+  if (selectedMealStatus.status !== "open") {
+    alert("Meal confirmation is currently closed!");
+    return;
+  }
+
+  setSubmitting(true);
+  setSubmitError("");
+
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Step 1: Send the email OTP
+    if (!otpSent) {
+      const { error } = await studentSupabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: {
+          shouldCreateUser: true,
+        },
+      });
+
+      if (error) throw error;
+
+      setOtpSent(true);
+      alert("Verification code sent! Check your email.");
       return;
     }
 
-    if (selectedMealStatus.status !== "open") {
-      alert("Meal confirmation is currently closed!");
-      return;
+    // Step 2: Verify the OTP
+    if (!otp.trim()) {
+      throw new Error("Please enter the email verification code.");
     }
 
+    const { error: otpError } =
+      await studentSupabase.auth.verifyOtp({
+        email: normalizedEmail,
+        token: otp.trim(),
+        type: "email",
+      });
 
-    const now = new Date();
+    if (otpError) {
+      throw new Error("Invalid or expired OTP. Please try again.");
+    }
 
-    const mealInfo = MEAL_TIMES[meal];
+    // Step 3: Create the meal pass using the verified session
+    const { data, error } =
+      await studentSupabase.functions.invoke(
+        "create-meal-pass",
+        {
+          body: {
+            student_name: name.trim(),
+            meal_type: meal,
+          },
+        }
+      );
 
-    const servingTime = new Date();
-    servingTime.setHours(
-      mealInfo.servingHour,
-      mealInfo.servingMinute,
-      0,
-      0
+    if (error) throw error;
+
+    if (!data?.success || !data?.meal_pass?.confirmation_token) {
+      throw new Error(
+        data?.error || "Could not create your meal pass."
+      );
+    }
+
+    const savedPass = data.meal_pass;
+
+    // Step 4: Generate the QR code
+    const qrDataUrl = await QRCode.toDataURL(
+      savedPass.confirmation_token,
+      { width: 240, margin: 2 }
     );
 
+    setMealPass({ ...savedPass, qrDataUrl });
 
-    const mealDate = new Date();
-
-    // If today's serving time has passed,
-    // booking belongs to tomorrow
-    if (now >= servingTime) {
-      mealDate.setDate(mealDate.getDate() + 1);
-    }
-
-
-    const response = {
-      name,
-      meal,
-      choice,
-      mealDate: mealDate.toLocaleDateString(),
-      submittedTime: now.toLocaleTimeString(),
-    };
-
-
-    addResponse(response);
+    addResponse({
+      name: savedPass.student_name,
+      meal: savedPass.meal_type,
+      mealDate: new Date(
+        `${savedPass.meal_date}T00:00:00`
+      ).toLocaleDateString(),
+      submittedTime: new Date().toLocaleTimeString(),
+    });
 
     setConfirmed(true);
-  };
-
+  } catch (error) {
+    console.error("Meal confirmation failed:", error);
+    setSubmitError(
+      error.message || "Confirmation failed. Please try again."
+    );
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="form-page">
@@ -393,6 +678,37 @@ function MealConfirmation({ setPage, addResponse }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
+              
+<label htmlFor="student-email">Student email</label>
+<input
+  id="student-email"
+  type="email"
+  value={email}
+  onChange={(e) => setEmail(e.target.value)}
+  placeholder="Enter your email address"
+  autoComplete="email"
+  required
+  disabled={otpSent}
+/>
+
+{otpSent && (
+  <>
+    <label htmlFor="student-otp">Email verification code</label>
+    <input
+      id="student-otp"
+      type="text"
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      value={otp}
+      onChange={(e) =>
+        setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))
+      }
+      placeholder="Enter the code from your email"
+      required
+    />
+  </>
+)}
+
 
 
               <label>Select Meal</label>
@@ -428,58 +744,23 @@ function MealConfirmation({ setPage, addResponse }) {
                 {selectedMealStatus.message}
 
               </div>
+{submitError && (
+  <p role="alert">{submitError}</p>
+)}
 
+{selectedMealStatus.status === "open" && (
+  <button
+    className="primary-btn submit-btn"
+    type="submit"
+    disabled={submitting}
+  >
+    {submitting ? "Saving Confirmation..." : "Confirm Meal"}
+  </button>
+)}
 
-              {selectedMealStatus.status === "open" && (
+              
 
-                <>
-
-                  <label>
-                    Will you have this meal?
-                  </label>
-
-
-                  <div className="choice">
-
-                    <input
-                      type="radio"
-                      name="mealChoice"
-                      checked={choice === "Yes"}
-                      onChange={() => setChoice("Yes")}
-                    />
-
-                    <span>
-                      Yes, I will have the meal
-                    </span>
-
-                  </div>
-
-
-                  <div className="choice">
-
-                    <input
-                      type="radio"
-                      name="mealChoice"
-                      checked={choice === "No"}
-                      onChange={() => setChoice("No")}
-                    />
-
-                    <span>
-                      No, I will not have the meal
-                    </span>
-
-                  </div>
-
-
-                  <button
-                    className="primary-btn submit-btn"
-                    type="submit"
-                  >
-                    Submit Confirmation
-                  </button>
-
-                </>
-              )}
+          
 
 
               {selectedMealStatus.status !== "open" && (
@@ -493,6 +774,7 @@ function MealConfirmation({ setPage, addResponse }) {
                   The mess authority can now view the final count.
 
                 </div>
+
               )}
 
             </form>
@@ -516,6 +798,23 @@ function MealConfirmation({ setPage, addResponse }) {
             <p>
               Your {meal} confirmation has been successfully recorded.
             </p>
+            
+{mealPass && (
+  <div className="meal-pass">
+    <h2>Your Meal Pass</h2>
+    <img
+      src={mealPass.qrDataUrl}
+      alt="Your unique meal pass QR code"
+      width="240"
+      height="240"
+    />
+    <p>Meal: {mealPass.meal_type}</p>
+    <p>Date: {mealPass.meal_date}</p>
+    <p>Status: Unused</p>
+    <p>Show this QR code to the canteen staff.</p>
+  </div>
+)}
+
 
             <button
               className="primary-btn"
@@ -525,6 +824,7 @@ function MealConfirmation({ setPage, addResponse }) {
             </button>
 
           </div>
+
         )}
 
       </div>
@@ -534,13 +834,108 @@ function MealConfirmation({ setPage, addResponse }) {
 }
 
 
-function Dashboard({ setPage, responses }) {
+function Dashboard({ setPage, responses, onLogout }) {
 
   const [currentTime, setCurrentTime] = useState(new Date());
+  
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanResult, setScanResult] = useState("");
+  const [scanError, setScanError] = useState("");
+  const [scanning, setScanning] = useState(false);
+
+  const scannerRef = useRef(null);
+
+  useEffect(() => {
+    if (!scannerOpen) return;
+
+    let cancelled = false;
+    let scanner;
+
+    async function startScanner() {
+      try {
+        scanner = new Html5Qrcode("meal-qr-reader");
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          async (decodedText) => {
+            if (cancelled || !scannerRef.current) return;
+
+            try {
+              await scannerRef.current.stop();
+            } catch {}
+
+            scannerRef.current = null;
+
+            if (!cancelled) {
+              setScanning(false);
+              
+setScanning(false);
+setScanResult("Verifying meal pass...");
+setScanError("");
+
+try {
+  const { data, error } = await supabase.functions.invoke(
+    "verify-meal-pass",
+    {
+      body: { token: decodedText },
+    }
+  );
+
+  if (error) throw error;
+
+  if (data?.valid) {
+    setScanResult(
+      `✅ ${data.message || "VALID — SERVE MEAL"} | ${data.meal || ""} | ${data.date || ""}`
+    );
+  } else {
+    setScanError(data?.message || "❌ Invalid or already used meal pass.");
+  }
+} catch (error) {
+  setScanError(
+    error.message || "Meal pass verification failed."
+  );
+}
+
+            }
+          },
+          () => {}
+        );
+
+        if (!cancelled) setScanning(true);
+      } catch (err) {
+        if (!cancelled) {
+          setScanError(
+            "Camera start nahi hua. Browser permission check karo."
+          );
+        }
+      }
+    }
+
+    startScanner();
+
+    return () => {
+      cancelled = true;
+      const activeScanner = scannerRef.current;
+
+      if (activeScanner) {
+        activeScanner
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            activeScanner.clear().catch(() => {});
+            if (scannerRef.current === activeScanner) {
+              scannerRef.current = null;
+            }
+          });
+      }
+    };
+  }, [scannerOpen]);
+
 
 
   useEffect(() => {
-
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -580,7 +975,6 @@ function Dashboard({ setPage, responses }) {
     const mealResponses = responses.filter(
       (response) =>
         response.meal === mealName &&
-        response.choice === "Yes" &&
         response.mealDate === targetDateString
     );
 
@@ -608,8 +1002,9 @@ function Dashboard({ setPage, responses }) {
     }
 
 
+    // Add 1 extra meal for every 5 confirmations
     const predicted =
-      Math.ceil(count * 1.1);
+      count + Math.floor(count / 5);
 
 
     return {
@@ -710,7 +1105,47 @@ function Dashboard({ setPage, responses }) {
           />
 
         </div>
+        
+        <div className="meal-scanner-section">
+          <h2>📷 Scan Student Meal Pass</h2>
+          <p>Scan the student's QR code to verify their meal pass.</p>
 
+          {!scannerOpen && (
+            <button
+              className="primary-btn"
+              onClick={() => {
+                setScanResult("");
+                setScanError("");
+                setScannerOpen(true);
+              }}
+            >
+              Open QR Scanner
+            </button>
+          )}
+
+          {scannerOpen && (
+            <>
+              <div
+                id="meal-qr-reader"
+                style={{ width: "100%", maxWidth: "400px" }}
+              />
+
+              <button
+                className="secondary-btn"
+                onClick={() => {
+                  setScannerOpen(false);
+                  setScanning(false);
+                }}
+              >
+                Stop Scanner
+              </button>
+            </>
+          )}
+
+          {scanning && <p>Camera is active. Point it at the meal QR.</p>}
+          {scanError && <p>{scanError}</p>}
+          {scanResult && <p>{scanResult}</p>}
+        </div>
 
         <div className="total-summary">
 
@@ -762,6 +1197,7 @@ function Dashboard({ setPage, responses }) {
           </p>
 
         </div>
+
 
       </div>
 
@@ -864,6 +1300,7 @@ function MealCard({ title, data }) {
           meals
 
         </div>
+
       )}
 
     </div>
